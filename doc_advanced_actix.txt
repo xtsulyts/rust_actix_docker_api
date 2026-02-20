@@ -1,0 +1,31 @@
+RESUMEN DE ERRORES EN ACTIX WEB (AVANZADO)
+
+1.  SISTEMA DE ERRORES
+    - Error Type: Actix Web usa su propio tipo actix_web::error::Error como representación unificada.
+    - ResponseError Trait: Es el trait fundamental que un error debe implementar para ser convertible en respuesta HTTP. Define:
+        * status_code(): Devuelve el código HTTP (404, 500, etc.).
+        * error_response(): Construye la HttpResponse completa que se envía al cliente.
+    - Integración con Result: Result<T: Responder, E: Into<Error>> implementa Responder, permitiendo que los handlers devuelvan Resultados con errores que implementen ResponseError.
+
+2.  ERRORES PERSONALIZADOS
+    - Implementación: Crear un enum o struct e implementar ResponseError para él.
+    - derive_more: Práctica común usar los derives Display y Error de este crate para definir mensajes de forma declarativa.
+    - Control total: Sobrescribiendo status_code() y error_response() se personaliza código HTTP y cuerpo del error.
+
+3.  ERRORES POR DEFECTO Y CONVERSIONES
+    - Implementaciones incorporadas: Actix Web ya implementa ResponseError para errores comunes (ej: std::io::Error se convierte automáticamente en InternalServerError 500).
+    - Error helpers: Funciones como error::ErrorBadRequest convierten errores que no implementan ResponseError al tipo Error de Actix con el código HTTP deseado.
+
+4.  BUENAS PRÁCTICAS: ERRORES DE USUARIO VS. INTERNOS
+    - Separación conceptual:
+        * Errores de usuario: Mensajes claros y seguros que el usuario debe ver (ej: "Email inválido").
+        * Errores internos: Fallos técnicos ocultos al usuario (ej: timeout de BD) que se mapean a un error genérico como "Error interno".
+    - Implementación típica: Un enum UserError con variantes específicas y una variante InternalError. Los errores internos se capturan y mapean a esta última.
+
+5.  LOGGING DE ERRORES
+    - Por defecto: Actix registra automáticamente todos los errores en nivel WARN.
+    - Depuración: Con RUST_BACKTRACE=1 y RUST_LOG=actix_web=debug se obtienen trazas completas en logs.
+    - Integración: Combinable con middleware Logger y env_logger para sistema de logging robusto.
+
+6.  RESUMEN CONCEPTUAL
+    El sistema de errores de Actix Web es explícito, tipado y controlable. Permite decidir exactamente qué información se muestra al usuario, qué se registra internamente y cómo se formatea cada respuesta de error.

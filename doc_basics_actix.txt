@@ -1,0 +1,63 @@
+RESUMEN DE FUNDAMENTOS DE ACTIX WEB (DESDE GETTING STARTED HASTA HANDLERS)
+
+1.  ARQUITECTURA Y EJECUCIÓN
+    - HttpServer: Es el servidor que escucha en un socket. Se configura con una fábrica de aplicaciones (un closure que crea una App nueva por cada hilo worker).
+    - Workers: Por defecto, un worker por núcleo de CPU. Cada worker tiene su propia instancia de App y estado. Si se necesita estado compartido entre hilos, hay que usar Arc o web::Data.
+    - #[actix_web::main]: Macro que envuelve la main asíncrona para ejecutarla en el runtime de Actix.
+    - run().await: Inicia el servidor de forma asíncrona; se debe esperar para que el programa no termine.
+
+2.  APP: ORGANIZACIÓN Y ESTADO
+    - App: Núcleo organizador. Agrupa rutas, middleware y estado bajo un mismo ámbito (scope).
+    - Scope (web::scope): Permite crear grupos de rutas con un prefijo común (ej: "/api"). Ideal para modularizar.
+    - configure: Método para delegar la configuración de rutas a funciones externas, mejorando la organización del código.
+    - Estado (State): Datos compartidos por todos los handlers de un mismo ámbito. Se accede con web::Data<T>. Puede ser:
+        - Por worker: Cada hilo tiene su copia (máximo rendimiento, sin locks).
+        - Compartido: Usando Arc y Atomics/Mutex (introduce sincronización y posible contención).
+    - Guards: Filtros avanzados en rutas (ej: por cabecera Host) que complementan el enrutamiento por URL.
+
+3.  HANDLERS (MANEJADORES)
+    - Definición: Funciones asíncronas que reciben cero o más extractores y devuelven un tipo que implementa Responder.
+    - Registro: Se asocian a rutas mediante macros (#[get("/")]) o manualmente con App::route().
+    - Características:
+        - Nunca deben bloquear el hilo (no usar std::thread::sleep). Las operaciones de I/O deben ser asíncronas (.await).
+        - Pueden devolver tipos simples (&str, String) porque ya implementan Responder.
+        - Para tipos personalizados, se debe implementar el trait Responder.
+        - Soportan respuestas en streaming (devolviendo un Stream<Item = Result<Bytes>>).
+        - Para unificar diferentes tipos de respuesta, se usa el tipo Either.
+
+4.  EXTRACTORS
+    - Concepto: Mecanismo type-safe para extraer información de la petición HTTP.
+    - Funcionamiento: Se declaran como parámetros en el handler. Actix intenta construirlos automáticamente.
+    - Límite: Hasta 12 por handler, pero solo el primero puede consumir el body.
+    - Principales extractores:
+        - web::Path<T>: Extrae variables de la ruta (ej: /users/{id}). Requiere Deserialize.
+        - web::Query<T>: Extrae parámetros de query string (?clave=valor). Requiere Deserialize.
+        - web::Json<T>: Parsea el body como JSON. Configurable (límite de tamaño, error handler).
+        - web::Form<T>: Parsea el body como formulario URL-encoded. Configurable.
+        - web::Data<T>: Accede al estado compartido de la App.
+        - HttpRequest: El objeto de petición completo (acceso de bajo nivel).
+        - String / Bytes: Extrae el body como texto o bytes crudos.
+    - Opcionalidad: Se puede usar Option<T> para manejar ausencia de datos sin error automático.
+
+5.  RESPONDER
+    - Concepto: Trait que convierte un tipo en una HttpResponse válida.
+    - Flujo: El handler retorna un tipo impl Responder, y Actix llama a su método respond_to().
+    - Implementaciones por defecto: &str, String, Result, HttpResponse, etc.
+    - Personalización: Implementando Responder para tipos propios se tiene control total sobre la respuesta (status, headers, body).
+
+6.  CICLO DE VIDA DE UNA PETICIÓN
+    1.  Llega una petición HTTP a HttpServer.
+    2.  Se asigna a un worker thread libre.
+    3.  El worker crea una instancia de App (si no existe) o usa la existente.
+    4.  El enrutamiento (macros o App::route) determina qué handler debe ejecutarse.
+    5.  Se construyen los extractores declarados en el handler a partir de la petición.
+    6.  Se ejecuta el handler (lógica de negocio).
+    7.  El valor retornado (impl Responder) se convierte en HttpResponse mediante respond_to().
+    8.  La respuesta se envía al cliente.
+
+7.  BUENAS PRÁCTICAS CLAVE
+    - Todo debe ser asíncrono: I/O, database, etc. Usar .await siempre.
+    - Evitar locks innecesarios: Si se puede, diseñar para que cada worker tenga su propio estado.
+    - Modularizar con scope y configure: Organizar rutas por dominios en módulos separados.
+    - Usar extractores para validación automática: Delegan en el framework el parseo y manejo de errores.
+    - Aprovechar Responder para respuestas limpias: Devolver tipos de negocio directamente.
