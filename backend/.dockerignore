@@ -30,7 +30,7 @@ ehthumbs.db
 *.db
 debug/
 
-# Docker related (but keep Dockerfile)
+# Docker related
 docker-compose*.yml
 docker-compose*.yaml
 !.dockerignore
@@ -40,7 +40,8 @@ tests/
 docs/
 *.md
 *.txt
-!.dockerignore
+
+# Essential files - explicitly included
 !Dockerfile
 !Cargo.toml
 !Cargo.lock
